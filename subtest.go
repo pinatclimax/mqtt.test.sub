@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -8,8 +9,6 @@ import (
 	"climax.com/mqtt.test.sub/Sub"
 
 	//import the Paho Go MQTT library
-
-	"strconv"
 
 	MQTT "github.com/eclipse/paho.mqtt.golang"
 )
@@ -20,8 +19,6 @@ var mycount int32
 var f MQTT.MessageHandler = func(client MQTT.Client, msg MQTT.Message) {
 	fmt.Printf("TOPIC: %s\n", msg.Topic())
 	fmt.Printf("MSG: %s\n", msg.Payload())
-	mycount++
-	fmt.Println("total count:", mycount)
 }
 
 func main() {
@@ -37,34 +34,59 @@ func main() {
 		panic(token.Error())
 	}
 
-	total := 80000
+	total := 10000
 	start := time.Now()
 	var wg sync.WaitGroup
 	wg.Add(total)
 
 	for i := 1; i <= total; i++ {
-		go Sub.SubTestTopic(c, strconv.Itoa(i), &wg)
-		//go Sub.SubTestTopic(c, strconv.Itoa(i))
+		tpanel, _, err := topicGenerator(i)
+		fmt.Println(i, tpanel)
+		go Sub.SubTestTopic(c, tpanel, &wg)
+
+		if err != nil {
+			fmt.Println(err)
+		}
 	}
-	// sillyname := randomdata.SillyName()
-	// fmt.Println(sillyname)
-	//subscribe to the topic /go-mqtt/sample and request messages to be delivered
-	//at a maximum qos of zero, wait for the receipt to confirm the subscription
-	// if token := c.Subscribe(sillyname, 0, nil); token.Wait() && token.Error() != nil {
-	// 	fmt.Println(token.Error())
-	// 	os.Exit(1)
-	// }
+
 	wg.Wait()
 	fmt.Println("sub finished")
 	fmt.Println("elapsed time: ", time.Since(start))
-	//Publish 5 messages to /go-mqtt/sample at qos 1 and wait for the receipt
-	//from the server after sending each message
-	// time.Sleep(10 * time.Second)
-	// for i := 0; i < 5; i++ {
-	// 	text := fmt.Sprintf("this is msg #%d!", i)
-	// 	token := c.Publish(strconv.Itoa(i), 0, false, text)
-	// 	token.Wait()
-	// }
 
 	<-make(chan int)
+}
+
+var macPrefix = "11:11:11:"
+var panelTopic = "panel"
+var userTopic = "user"
+var ffffffNum = 16777215
+
+func topicGenerator(num int) (tpanel string, tuser string, err error) {
+	post, err := numberToMac(num)
+	if err != nil {
+		return "", "", err
+	}
+	tpanel = macPrefix + post + "_" + panelTopic
+	tuser = macPrefix + post + "_" + userTopic
+	return tpanel, tuser, nil
+}
+
+func userGenerator(num int) (user string, passwd string, err error) {
+	post, err := numberToMac(num)
+	if err != nil {
+		return "", "", err
+	}
+	user = macPrefix + post + ":" + user
+	passwd = macPrefix + post + ":" + passwd
+	return user, passwd, nil
+}
+
+func numberToMac(num int) (string, error) {
+	if num > 16777215 {
+		return "", errors.New("number is greater than 16777215")
+	}
+	hexnum := fmt.Sprintf("%06x", num)
+	postmac := fmt.Sprintf("%s:%s:%s", hexnum[0:2], hexnum[2:4], hexnum[4:6])
+	//	log.Println("postmac:", postmac)
+	return postmac, nil
 }
